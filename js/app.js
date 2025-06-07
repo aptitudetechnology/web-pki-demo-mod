@@ -82,6 +82,10 @@ class PGPApp {
         this.bindElement('loadKeyBtn', 'click', () => document.getElementById('keyFileInput').click());
         this.bindElement('keyFileInput', 'change', this.handleFileLoad.bind(this));
         
+        // Key Copy Events
+        this.bindElement('copyPublicKeyBtn', 'click', this.handleCopyPublicKey.bind(this));
+        this.bindElement('copyPrivateKeyBtn', 'click', this.handleCopyPrivateKey.bind(this));
+        
         // Tab Events
         this.bindElement('signTab', 'click', () => this.switchTab('sign'));
         this.bindElement('verifyTab', 'click', () => this.switchTab('verify'));
@@ -420,6 +424,49 @@ class PGPApp {
         console.log('Comment changed to:', event.target.value);
     }
 
+async handleCopyPublicKey() {
+    if (!this.state.currentKeyPair || !this.state.currentKeyPair.publicKey) {
+        this.showError('No public key available to copy');
+        return;
+    }
+    
+    try {
+        // Get the public key as armored text
+        const publicKeyArmored = typeof this.state.currentKeyPair.publicKey === 'string' 
+            ? this.state.currentKeyPair.publicKey 
+            : this.state.currentKeyPair.publicKey.armor();
+        
+        await navigator.clipboard.writeText(publicKeyArmored);
+        this.showSuccess('Public key copied to clipboard');
+        
+    } catch (error) {
+        console.error('Failed to copy public key:', error);
+        this.showError(`Failed to copy public key: ${error.message}`);
+    }
+}
+
+async handleCopyPrivateKey() {
+    if (!this.state.currentKeyPair || !this.state.currentKeyPair.privateKey) {
+        this.showError('No private key available to copy');
+        return;
+    }
+    
+    try {
+        // Get the private key as armored text
+        const privateKeyArmored = typeof this.state.currentKeyPair.privateKey === 'string' 
+            ? this.state.currentKeyPair.privateKey 
+            : this.state.currentKeyPair.privateKey.armor();
+        
+        await navigator.clipboard.writeText(privateKeyArmored);
+        this.showSuccess('Private key copied to clipboard');
+        
+    } catch (error) {
+        console.error('Failed to copy private key:', error);
+        this.showError(`Failed to copy private key: ${error.message}`);
+    }
+}
+
+
     // Global event handlers
     handleGlobalKeydown(event) {
         if (event.key === 'Escape') {
@@ -559,6 +606,8 @@ class PGPApp {
         this.setButtonState('verifyBtn', true); // Can verify with custom key
         this.setButtonState('encryptBtn', true); // Can encrypt with custom key
         this.setButtonState('decryptBtn', hasKeys);
+        this.setButtonState('copyPublicKeyBtn', hasKeys);
+        this.setButtonState('copyPrivateKeyBtn', hasKeys);
         
         // Update status indicators
         this.updateStatusIndicators(hasKeys);
