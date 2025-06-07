@@ -16,13 +16,15 @@ export class KeyManager {
             },
             comment: ''
         };
+        
+        // Initialize FileUtils for file operations
+        this.fileUtils = new FileUtils();
     }
 
     // Generate new key pair
     async generateKeyPair(userInfo, advancedConfig = null) {
-    try {
-        const config = advancedConfig || this.advancedConfig;
-        
+        try {
+            const config = advancedConfig || this.advancedConfig;
             
             // Build key generation options
             const keyOptions = {
@@ -35,28 +37,28 @@ export class KeyManager {
                 passphrase: userInfo.passphrase,
                 format: 'armored'
             };
-
+            
             // Set algorithm-specific options
             if (config.algorithm === 'ecc') {
                 keyOptions.curve = CONSTANTS.DEFAULT_CURVE;
             } else {
                 keyOptions.rsaBits = config.keySize || CONSTANTS.DEFAULT_RSA_BITS;
             }
-
+            
             // Set expiration
             if (config.expiration > 0) {
                 keyOptions.keyExpirationTime = config.expiration;
             }
-
+            
             console.log('Generating key with options:', keyOptions);
-
+            
             // Generate the key pair
             const { privateKey, publicKey } = await openpgp.generateKey(keyOptions);
-
+            
             // Parse keys for metadata
             const privateKeyObj = await openpgp.readPrivateKey({ armoredKey: privateKey });
             const publicKeyObj = await openpgp.readKey({ armoredKey: publicKey });
-
+            
             const keyPair = {
                 privateKey,
                 publicKey,
@@ -70,113 +72,163 @@ export class KeyManager {
                     userIds: publicKeyObj.getUserIDs()
                 }
             };
-
+            
             this.currentKeyPair = keyPair;
             return keyPair;
-
         } catch (error) {
             console.error('Key generation failed:', error);
             throw new Error(`Key generation failed: ${error.message}`);
         }
     }
 
-    // Load key pair from backup
-    async loadKeyPair(backup) {
+    // Save key pair to file (delegates to FileUtils)
+    async saveKeyPairToFile(keyPair = null, filename = null) {
         try {
-            Validation.validateKeyBackup(backup);
+            const targetKeyPair = keyPair || this.currentKeyPair;
+            if (!targetKeyPair) {
+                throw new Error('No key pair available to save');
+            }
+            
+            return await this.fileUtils.saveKeyPairToFile(targetKeyPair, filename);
+        } catch (error) {
+            console.error('Failed to save key pair to file:', error);
+            throw new Error(`Save failed: ${error.message}`);
+        }
+    }
 
-            // Parse keys
-            const privateKeyObj = await openpgp.readPrivateKey({ armoredKey: backup.keys.private });
-            const publicKeyObj = await openpgp.readKey({ armoredKey: backup.keys.public });
+    // Save individual keys to separate files
+    async savePrivateKeyToFile(keyPair = null, filename = null) {
+        try {
+            const targetKeyPair = keyPair || this.currentKeyPair;
+            if (!targetKeyPair) {
+                throw new Error('No key pair available');
+            }
+            
+            return await this.fileUtils.saveKeyToFile(
+                targetKeyPair.privateKey, 
+                'private', 
+                filename
+            );
+        } catch (error) {
+            console.error('Failed to save private key:', error);
+            throw new Error(`Private key save failed: ${error.message}`);
+        }
+    }
 
-            const keyPair = {
-                privateKey: backup.keys.private,
-                publicKey: backup.keys.public,
-                privateKeyObj,
-                publicKeyObj,
-                metadata: backup.metadata || {
-                    keyId: publicKeyObj.getKeyIDs()[0].toHex().toUpperCase(),
-                    fingerprint: publicKeyObj.getFingerprint(),
-                    algorithm: 'LOADED',
-                    created: publicKeyObj.getCreationTime(),
-                    userIds: publicKeyObj.getUserIDs()
+    async savePublicKeyToFile(keyPair = null, filename = null) {
+        try {
+            const targetKeyPair = keyPair || this.currentKeyPair;
+            if (!targetKeyPair) {
+                throw new Error('No key pair available');
+            }
+            
+            return await this.fileUtils.saveKeyToFile(
+                targetKeyPair.publicKey, 
+                'public', 
+                filename
+            );
+        } catch (error) {
+            console.error('Failed to save public key:', error);
+            throw new Error(`Public key save failed: ${error.message}`);
+        }
+    }
+
+    // Load key from file (delegates to FileUtils)
+    async loadKeyFromFile(file) {
+        try {
+            const keyData = await this.fileUtils.loadKeyFromFile(file);
+            
+            // Try to parse as private key first, then public key
+            let keyPair = null;
+            
+            if (keyData.content.includes('PRIVATE KEY BLOCK')) {
+                const privateKeyObj = await openpgp.readPrivateKey({ armoredKey: keyData.content });
+                const publicKey = privateKeyObj.toPublic().armor();
+                const publicKeyObj = await openpgp.readKey({ armoredKey: publicKey });
+                
+                keyPair = {
+                    privateKey: keyData.content,
+                    publicKey: publicKey,
+                    privateKeyObj,
+                    publicKeyObj,
+                    metadata: {
+                        keyId: publicKeyObj.getKeyIDs()[0].toHex().toUpperCase(),
+                        fingerprint: publicKeyObj.getFingerprint(),
+                        algorithm: this.getKeyAlgorithm(publicKeyObj),
+                        created: publicKeyObj.getCreationTime(),
+                        userIds: publicKeyObj.getUserIDs()
+                    }
+                };
+            } else if (keyData.content.includes('PUBLIC KEY BLOCK')) {
+                const publicKeyObj = await openpgp.readKey({ armoredKey: keyData.content });
+                
+                keyPair = {
+                    privateKey: null,
+                    publicKey: keyData.content,
+                    privateKeyObj: null,
+                    publicKeyObj,
+                    metadata: {
+                        keyId: publicKeyObj.getKeyIDs()[0].toHex().toUpperCase(),
+                        fingerprint: publicKeyObj.getFingerprint(),
+                        algorithm: this.getKeyAlgorithm(publicKeyObj),
+                        created: publicKeyObj.getCreationTime(),
+                        userIds: publicKeyObj.getUserIDs()
+                    }
+                };
+            } else {
+                throw new Error('File does not contain a valid PGP key');
+            }
+            
+            return {
+                keyPair,
+                fileInfo: {
+                    filename: keyData.filename,
+                    size: keyData.size,
+                    lastModified: keyData.lastModified
                 }
             };
-
-            this.currentKeyPair = keyPair;
-            return keyPair;
-
         } catch (error) {
-            throw new Error(`Failed to load key pair: ${error.message}`);
+            console.error('Failed to load key from file:', error);
+            throw new Error(`Key load failed: ${error.message}`);
         }
     }
 
-    // Create key backup for download
-    createKeyBackup(userInfo) {
-        if (!this.currentKeyPair) {
-            throw new Error(CONSTANTS.ERRORS.NO_KEYS);
+    // Helper method to determine key algorithm
+    getKeyAlgorithm(keyObj) {
+        try {
+            const primaryKey = keyObj.getPrimaryKey();
+            const algorithm = primaryKey.getAlgorithmInfo();
+            
+            if (algorithm.algorithm === 'rsaEncryptSign' || algorithm.algorithm === 'rsa') {
+                return `RSA${algorithm.bits || ''}`;
+            } else if (algorithm.curve) {
+                return 'ECC';
+            } else {
+                return 'UNKNOWN';
+            }
+        } catch (error) {
+            console.warn('Could not determine key algorithm:', error);
+            return 'UNKNOWN';
         }
-
-        const backup = {
-            version: '1.0',
-            created: new Date().toISOString(),
-            userInfo: {
-                name: userInfo.name,
-                email: userInfo.email
-            },
-            config: {
-                algorithm: this.advancedConfig.algorithm,
-                keySize: this.advancedConfig.keySize,
-                comment: this.advancedConfig.comment
-            },
-            keys: {
-                private: this.currentKeyPair.privateKey,
-                public: this.currentKeyPair.publicKey
-            },
-            metadata: this.currentKeyPair.metadata
-        };
-
-        return JSON.stringify(backup, null, 2);
     }
 
-    // Get current key pair
+    // Get current key pair info
     getCurrentKeyPair() {
         return this.currentKeyPair;
     }
 
-    // Check if keys are available
-    hasKeys() {
-        return this.currentKeyPair !== null;
+    // Set current key pair
+    setCurrentKeyPair(keyPair) {
+        this.currentKeyPair = keyPair;
     }
 
-    // Update advanced configuration
-    updateAdvancedConfig(newConfig) {
-        this.advancedConfig = { ...this.advancedConfig, ...newConfig };
-    }
-
-    // Get advanced configuration
-    getAdvancedConfig() {
-        return { ...this.advancedConfig };
-    }
-
-    // Get formatted key information
-    getFormattedKeyInfo() {
-        if (!this.currentKeyPair) {
-            return null;
-        }
-
-        const metadata = this.currentKeyPair.metadata;
-        return {
-            keyId: metadata.keyId,
-            fingerprint: Formatting.formatFingerprint(metadata.fingerprint),
-            algorithm: Formatting.formatAlgorithm(metadata.algorithm),
-            created: Formatting.formatDate(metadata.created),
-            userIds: metadata.userIds
-        };
-    }
-
-    // Clear current keys
-    clearKeys() {
+    // Clear current key pair
+    clearCurrentKeyPair() {
         this.currentKeyPair = null;
+    }
+
+    // Check if a key pair is currently loaded
+    hasKeyPair() {
+        return this.currentKeyPair !== null;
     }
 }
