@@ -586,6 +586,8 @@ async handleCopyPrivateKey() {
 
     updateKeyInfo(keyPair) {
         if (!keyPair || !keyPair.metadata) return;
+         // Add this temporary debug line:
+    console.log('Key pair metadata:', keyPair.metadata);
         
         const keyInfo = document.getElementById('keyInfo');
         if (keyInfo) {
