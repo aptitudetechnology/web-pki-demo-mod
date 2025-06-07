@@ -10,9 +10,17 @@ import { Clipboard } from './utils/clipboard.js';
 
 class PGPApp {
     constructor() {
+    
+        // Initialize utilities first
+        this.fileUtils = new FileUtils();
+
+        
         // Initialize modules
-        this.keyManager = new KeyManager();
-        this.cryptoOps = new CryptoOps();
+      //  this.keyManager = new KeyManager();
+       // this.cryptoOps = new CryptoOps();
+       
+        this.keyManager = new KeyManager(this.fileUtils);
+        this.cryptoOps = new CryptoOps(this.fileUtils);
         this.signVerify = new SignVerify();
         this.encrypt = new Encrypt();
         this.decrypt = new Decrypt();
