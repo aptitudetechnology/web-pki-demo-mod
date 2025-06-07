@@ -19,9 +19,10 @@ export class KeyManager {
     }
 
     // Generate new key pair
-    async generateKeyPair(userInfo) {
-        try {
-            const config = this.advancedConfig;
+    async generateKeyPair(userInfo, advancedConfig = null) {
+    try {
+        const config = advancedConfig || this.advancedConfig;
+        
             
             // Build key generation options
             const keyOptions = {
