@@ -1,0 +1,215 @@
+import { KeyManager } from './modules/keyManager.js';
+import { CryptoOps } from './modules/cryptoOps.js';
+import { SignVerify } from './modules/signVerify.js';
+import { Encrypt } from './modules/encrypt.js';
+import { Decrypt } from './modules/decrypt.js';
+import { Validation } from './utils/validation.js';
+import { Formatting } from './utils/formatting.js';
+import { Clipboard } from './utils/clipboard.js';
+
+export class App {
+    constructor() {
+        this.keyManager = null;
+        this.cryptoOps = null;
+        this.signVerify = null;
+        this.encrypt = null;
+        this.decrypt = null;
+        this.isInitialized = false;
+    }
+
+    // Initialize the application
+    async init() {
+        try {
+            console.log('Initializing OpenPGP.js web PKI Demo...');
+
+            // Check if OpenPGP.js is loaded
+            if (typeof openpgp === 'undefined') {
+                throw new Error('OpenPGP.js library not loaded');
+            }
+
+            console.log('OpenPGP.js version:', openpgp.version || 'Unknown');
+
+            // Initialize core modules
+            this.keyManager = new KeyManager();
+            this.cryptoOps = new CryptoOps();
+
+            // Initialize operation modules
+            this.signVerify = new SignVerify(this.keyManager, this.cryptoOps);
+            this.encrypt = new Encrypt(this.keyManager, this.cryptoOps);
+            this.decrypt = new Decrypt(this.keyManager, this.cryptoOps);
+
+            // Initialize all modules
+            await this.keyManager.init();
+            this.signVerify.init();
+            this.encrypt.init();
+            this.decrypt.init();
+
+            // Setup global event listeners
+            this.setupGlobalEventListeners();
+
+            // Initialize UI state
+            this.updateGlobalUI();
+
+            this.isInitialized = true;
+            console.log('OpenPGP.js Demo initialized successfully');
+
+        } catch (error) {
+            console.error('Failed to initialize application:', error);
+            this.showGlobalError(`Failed to initialize application: ${error.message}`);
+        }
+    }
+
+    // Setup global event listeners
+    setupGlobalEventListeners() {
+        // Listen for key events from KeyManager
+        document.addEventListener('keysGenerated', (event) => {
+            console.log('Keys generated event received:', event.detail);
+            this.updateGlobalUI();
+        });
+
+        document.addEventListener('keysLoaded', (event) => {
+            console.log('Keys loaded event received:', event.detail);
+            this.updateGlobalUI();
+        });
+
+        document.addEventListener('keysCleared', (event) => {
+            console.log('Keys cleared event received');
+            this.updateGlobalUI();
+        });
+
+        // Global error handling
+        window.addEventListener('error', (e) => {
+            console.error('Global error:', e.error);
+            this.handleGlobalError(e.error);
+        });
+
+        // Handle unhandled promise rejections
+        window.addEventListener('unhandledrejection', (e) => {
+            console.error('Unhandled promise rejection:', e.reason);
+            this.handleGlobalError(e.reason);
+        });
+
+        // Escape key to close modals or reset states
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.handleEscapeKey();
+            }
+        });
+    }
+
+    // Update global UI state
+    updateGlobalUI() {
+        const hasKeys = this.keyManager?.hasKeys() || false;
+        
+        // Update all operation modules
+        if (this.signVerify) this.signVerify.updateUI();
+        if (this.encrypt) this.encrypt.updateUI();
+        if (this.decrypt) this.decrypt.updateUI();
+
+        // Update global status indicators
+        this.updateGlobalStatus(hasKeys);
+    }
+
+    // Update global status indicators
+    updateGlobalStatus(hasKeys) {
+        // You can add global status updates here if needed
+        // For now, individual modules handle their own status
+        
+        if (hasKeys) {
+            console.log('Keys are available - all operations enabled');
+        } else {
+            console.log('No keys available - operations limited');
+        }
+    }
+
+    // Handle global errors
+    handleGlobalError(error) {
+        // Don't show duplicate errors or errors during key generation
+        if (this.keyManager?.isGenerating) {
+            return;
+        }
+
+        console.error('Handling global error:', error);
+        
+        // Show user-friendly error message
+        let errorMessage = 'An unexpected error occurred.';
+        if (error && error.message) {
+            errorMessage = error.message;
+        }
+
+        this.showGlobalError(errorMessage);
+    }
+
+    // Show global error message
+    showGlobalError(message) {
+        // You can implement a global error display here
+        // For now, we'll use console and alert as fallback
+        console.error('Global error:', message);
+        
+        // Only show alert for critical errors
+        if (message.includes('Failed to initialize') || message.includes('OpenPGP.js library not loaded')) {
+            alert(`Critical Error: ${message}\n\nPlease refresh the page and try again.`);
+        }
+    }
+
+    // Handle escape key presses
+    handleEscapeKey() {
+        // Close any open modals
+        const modal = document.getElementById('advancedOptionsModal');
+        if (modal && modal.classList.contains('active')) {
+            this.keyManager.hideAdvancedModal();
+        }
+    }
+
+    // Reset all operations
+    resetAll() {
+        if (this.signVerify) this.signVerify.reset();
+        if (this.encrypt) this.encrypt.reset();
+        if (this.decrypt) this.decrypt.reset();
+        
+        console.log('All operations reset');
+    }
+
+    // Get application status
+    getStatus() {
+        return {
+            initialized: this.isInitialized,
+            hasKeys: this.keyManager?.hasKeys() || false,
+            keyManager: this.keyManager?.getStatus() || null,
+            signVerify: this.signVerify?.getStatus() || null,
+            encrypt: this.encrypt?.getStatus() || null,
+            decrypt: this.decrypt?.getStatus() || null
+        };
+    }
+
+    // Export current state for debugging
+    exportDebugInfo() {
+        return {
+            timestamp: new Date().toISOString(),
+            status: this.getStatus(),
+            openpgpVersion: typeof openpgp !== 'undefined' ? (openpgp.version || 'Unknown') : 'Not loaded',
+            userAgent: navigator.userAgent,
+            hasKeys: this.keyManager?.hasKeys() || false,
+            keyInfo: this.keyManager?.getCurrentKeyInfo() || null
+        };
+    }
+}
+
+// Initialize the application when DOM is ready
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('DOM loaded, initializing OpenPGP.js Demo...');
+    
+    // Create and initialize the main app
+    const app = new App();
+    await app.init();
+    
+    // Expose app instance for debugging
+    window.OpenPGPDemo = {
+        app: app,
+        getStatus: () => app.getStatus(),
+        exportDebugInfo: () => app.exportDebugInfo(),
+        reset: () => app.resetAll()
+    };
+    
+    console.log('OpenPGP.js Demo ready! Access debugging info via window.OpenPGPDemo');
+});
