@@ -4,6 +4,9 @@ import { CryptoOps } from './modules/cryptoOps.js';
 import { SignVerify } from './modules/signVerify.js';
 import { Encrypt } from './modules/encrypt.js';
 import { Decrypt } from './modules/decrypt.js';
+import { UIManager } from './modules/uiManager.js';
+import { ModalManager } from './modules/modalManager.js';
+import { TabManager } from './modules/tabManager.js';
 import { Validation } from './utils/validation.js';
 import { Formatting } from './utils/formatting.js';
 import { Clipboard } from './utils/clipboard.js';
@@ -16,6 +19,9 @@ class PGPApp {
         this.signVerify = new SignVerify();
         this.encrypt = new Encrypt();
         this.decrypt = new Decrypt();
+        this.uiManager = new UIManager();
+        this.modalManager = new ModalManager();
+        this.tabManager = new TabManager();
         
         // Application state
         this.state = {
@@ -50,22 +56,20 @@ class PGPApp {
             // Setup all event listeners
             this.setupEventListeners();
             
-            // Initialize UI state
-            this.initializeUI();
+            // Initialize UI
+            this.uiManager.initializeUI();
             
             this.isInitialized = true;
             console.log('PGP App initialized successfully');
             
         } catch (error) {
             console.error('Failed to initialize application:', error);
-            this.showError(`Failed to initialize: ${error.message}`);
+            this.uiManager.showError(`Failed to initialize: ${error.message}`);
         }
     }
 
     // ==================== EVENT LISTENER SETUP ====================
     setupEventListeners() {
-        console.log('Setting up event listeners...');
-        
         // Key Generation Events
         this.bindElement('generateBtn', 'click', this.handleGenerateClick.bind(this));
         
@@ -73,8 +77,8 @@ class PGPApp {
         this.bindElement('enableAdvancedOptions', 'change', this.handleAdvancedOptionsToggle.bind(this));
         
         // Modal Events
-        this.bindElement('modalClose', 'click', () => this.hideModal('advancedOptionsModal'));
-        this.bindElement('modalCancel', 'click', () => this.hideModal('advancedOptionsModal'));
+        this.bindElement('modalClose', 'click', () => this.modalManager.hideModal('advancedOptionsModal'));
+        this.bindElement('modalCancel', 'click', () => this.modalManager.hideModal('advancedOptionsModal'));
         this.bindElement('modalApply', 'click', this.handleModalApply.bind(this));
         
         // File Operation Events
@@ -83,8 +87,8 @@ class PGPApp {
         this.bindElement('keyFileInput', 'change', this.handleFileLoad.bind(this));
         
         // Tab Events
-        this.bindElement('signTab', 'click', () => this.switchTab('sign'));
-        this.bindElement('verifyTab', 'click', () => this.switchTab('verify'));
+        this.bindElement('signTab', 'click', () => this.tabManager.switchTab('sign'));
+        this.bindElement('verifyTab', 'click', () => this.tabManager.switchTab('verify'));
         
         // Sign/Verify Events
         this.bindElement('signBtnNew', 'click', this.handleSignMessage.bind(this));
@@ -108,7 +112,7 @@ class PGPApp {
         // Modal overlay click to close
         this.bindElement('advancedOptionsModal', 'click', (e) => {
             if (e.target.id === 'advancedOptionsModal') {
-                this.hideModal('advancedOptionsModal');
+                this.modalManager.hideModal('advancedOptionsModal');
             }
         });
         
@@ -120,9 +124,9 @@ class PGPApp {
         const element = document.getElementById(id);
         if (element) {
             element.addEventListener(event, handler);
-            console.log(`✓ Bound ${event} event to #${id}`);
+            console.log(`Bound ${event} event to #${id}`);
         } else {
-            console.warn(`⚠ Element #${id} not found for event binding`);
+            console.warn(`Element #${id} not found for event binding`);
         }
     }
 
@@ -150,7 +154,7 @@ class PGPApp {
     
     async handleGenerateClick() {
         try {
-            this.setLoading('generateBtn', true);
+            this.uiManager.setLoading('generateBtn', true);
             this.state.isGenerating = true;
             
             // Validate user input
@@ -163,17 +167,17 @@ class PGPApp {
             this.state.currentKeyPair = keyPair;
             
             // Update UI
-            this.updateKeyInfo(keyPair);
-            this.showSuccess('Key pair generated successfully!');
+            this.uiManager.updateKeyInfo(keyPair);
+            this.uiManager.showSuccess('Key pair generated successfully!');
             this.updateButtonStates();
             
             console.log('Key pair generated successfully');
             
         } catch (error) {
             console.error('Key generation failed:', error);
-            this.showError(`Key generation failed: ${error.message}`);
+            this.uiManager.showError(`Key generation failed: ${error.message}`);
         } finally {
-            this.setLoading('generateBtn', false);
+            this.uiManager.setLoading('generateBtn', false);
             this.state.isGenerating = false;
         }
     }
@@ -186,7 +190,7 @@ class PGPApp {
         if (isEnabled) {
             advancedDesc.classList.remove('hidden');
             currentSettingsDisplay.style.display = 'block';
-            this.showModal('advancedOptionsModal');
+            this.modalManager.showModal('advancedOptionsModal');
             this.updateCurrentSettingsDisplay();
         } else {
             advancedDesc.classList.add('hidden');
@@ -196,22 +200,22 @@ class PGPApp {
 
     handleModalApply() {
         this.updateCurrentSettingsDisplay();
-        this.hideModal('advancedOptionsModal');
-        this.showSuccess('Advanced settings applied');
+        this.modalManager.hideModal('advancedOptionsModal');
+        this.uiManager.showSuccess('Advanced settings applied');
     }
 
     async handleSaveKey() {
         if (!this.state.currentKeyPair) {
-            this.showError('No key pair to save');
+            this.uiManager.showError('No key pair to save');
             return;
         }
         
         try {
             await this.keyManager.saveKeyPair(this.state.currentKeyPair);
-            this.showSuccess('Key pair saved successfully');
+            this.uiManager.showSuccess('Key pair saved successfully');
         } catch (error) {
             console.error('Save failed:', error);
-            this.showError(`Save failed: ${error.message}`);
+            this.uiManager.showError(`Save failed: ${error.message}`);
         }
     }
 
@@ -220,48 +224,48 @@ class PGPApp {
         if (!file) return;
         
         try {
-            this.setLoading('loadKeyBtn', true);
+            this.uiManager.setLoading('loadKeyBtn', true);
             
             const keyPair = await this.keyManager.loadKeyPair(file);
             this.state.currentKeyPair = keyPair;
             
-            this.updateKeyInfo(keyPair);
-            this.showSuccess('Key pair loaded successfully');
+            this.uiManager.updateKeyInfo(keyPair);
+            this.uiManager.showSuccess('Key pair loaded successfully');
             this.updateButtonStates();
             
         } catch (error) {
             console.error('Load failed:', error);
-            this.showError(`Load failed: ${error.message}`);
+            this.uiManager.showError(`Load failed: ${error.message}`);
         } finally {
-            this.setLoading('loadKeyBtn', false);
+            this.uiManager.setLoading('loadKeyBtn', false);
         }
     }
 
     async handleSignMessage() {
         if (!this.state.currentKeyPair) {
-            this.showError('No key pair loaded for signing');
+            this.uiManager.showError('No key pair loaded for signing');
             return;
         }
         
         try {
             const message = document.getElementById('messageToSignNew').value.trim();
             if (!message) {
-                this.showError('Please enter a message to sign');
+                this.uiManager.showError('Please enter a message to sign');
                 return;
             }
             
-            this.setLoading('signBtnNew', true);
+            this.uiManager.setLoading('signBtnNew', true);
             
             const signedMessage = await this.signVerify.signMessage(message, this.state.currentKeyPair);
             
-            this.showOutput('signOutputNew', 'Signed Message:', signedMessage);
-            this.showSuccess('Message signed successfully');
+            this.uiManager.showOutput('signOutputNew', 'Signed Message:', signedMessage);
+            this.uiManager.showSuccess('Message signed successfully');
             
         } catch (error) {
             console.error('Signing failed:', error);
-            this.showError(`Signing failed: ${error.message}`);
+            this.uiManager.showError(`Signing failed: ${error.message}`);
         } finally {
-            this.setLoading('signBtnNew', false);
+            this.uiManager.setLoading('signBtnNew', false);
         }
     }
 
@@ -269,11 +273,11 @@ class PGPApp {
         try {
             const signedMessage = document.getElementById('signedMessageToVerify').value.trim();
             if (!signedMessage) {
-                this.showError('Please enter a signed message to verify');
+                this.uiManager.showError('Please enter a signed message to verify');
                 return;
             }
             
-            this.setLoading('verifyBtn', true);
+            this.uiManager.setLoading('verifyBtn', true);
             
             // Check if using custom public key
             const customKeyContainer = document.getElementById('verifyCustomPublicKeyContainer');
@@ -290,13 +294,13 @@ class PGPApp {
             
             const result = await this.signVerify.verifyMessage(signedMessage, publicKey);
             
-            this.showVerifyResult('verifyOutput', result);
+            this.uiManager.showVerifyResult('verifyOutput', result);
             
         } catch (error) {
             console.error('Verification failed:', error);
-            this.showError(`Verification failed: ${error.message}`);
+            this.uiManager.showError(`Verification failed: ${error.message}`);
         } finally {
-            this.setLoading('verifyBtn', false);
+            this.uiManager.setLoading('verifyBtn', false);
         }
     }
 
@@ -317,11 +321,11 @@ class PGPApp {
         try {
             const message = document.getElementById('messageToEncrypt').value.trim();
             if (!message) {
-                this.showError('Please enter a message to encrypt');
+                this.uiManager.showError('Please enter a message to encrypt');
                 return;
             }
             
-            this.setLoading('encryptBtn', true);
+            this.uiManager.setLoading('encryptBtn', true);
             
             // Check if using custom public key
             const customKeyContainer = document.getElementById('encryptCustomPublicKeyContainer');
@@ -337,20 +341,20 @@ class PGPApp {
             }
             
             if (!publicKey) {
-                this.showError('No public key available for encryption');
+                this.uiManager.showError('No public key available for encryption');
                 return;
             }
             
             const encryptedMessage = await this.encrypt.encryptMessage(message, publicKey);
             
-            this.showOutput('encryptOutput', 'Encrypted Message:', encryptedMessage);
-            this.showSuccess('Message encrypted successfully');
+            this.uiManager.showOutput('encryptOutput', 'Encrypted Message:', encryptedMessage);
+            this.uiManager.showSuccess('Message encrypted successfully');
             
         } catch (error) {
             console.error('Encryption failed:', error);
-            this.showError(`Encryption failed: ${error.message}`);
+            this.uiManager.showError(`Encryption failed: ${error.message}`);
         } finally {
-            this.setLoading('encryptBtn', false);
+            this.uiManager.setLoading('encryptBtn', false);
         }
     }
 
@@ -369,29 +373,29 @@ class PGPApp {
 
     async handleDecrypt() {
         if (!this.state.currentKeyPair) {
-            this.showError('No private key loaded for decryption');
+            this.uiManager.showError('No private key loaded for decryption');
             return;
         }
         
         try {
             const encryptedMessage = document.getElementById('messageToDecrypt').value.trim();
             if (!encryptedMessage) {
-                this.showError('Please enter an encrypted message to decrypt');
+                this.uiManager.showError('Please enter an encrypted message to decrypt');
                 return;
             }
             
-            this.setLoading('decryptBtn', true);
+            this.uiManager.setLoading('decryptBtn', true);
             
             const decryptedMessage = await this.decrypt.decryptMessage(encryptedMessage, this.state.currentKeyPair);
             
-            this.showOutput('decryptOutput', 'Decrypted Message:', decryptedMessage);
-            this.showSuccess('Message decrypted successfully');
+            this.uiManager.showOutput('decryptOutput', 'Decrypted Message:', decryptedMessage);
+            this.uiManager.showSuccess('Message decrypted successfully');
             
         } catch (error) {
             console.error('Decryption failed:', error);
-            this.showError(`Decryption failed: ${error.message}`);
+            this.uiManager.showError(`Decryption failed: ${error.message}`);
         } finally {
-            this.setLoading('decryptBtn', false);
+            this.uiManager.setLoading('decryptBtn', false);
         }
     }
 
@@ -424,183 +428,13 @@ class PGPApp {
     handleGlobalKeydown(event) {
         if (event.key === 'Escape') {
             // Close any open modals
-            this.hideModal('advancedOptionsModal');
+            this.modalManager.hideModal('advancedOptionsModal');
         }
     }
 
     handleGlobalError(event) {
         console.error('Global error:', event.error);
-        this.showError(`Unexpected error: ${event.error?.message || 'Unknown error'}`);
-    }
-
-    // ==================== UI HELPER METHODS ====================
-    
-    initializeUI() {
-        // Initialize tab state
-        this.switchTab('sign');
-        
-        // Set initial button states
-        this.updateButtonStates();
-        
-        // Hide custom key containers initially
-        document.getElementById('verifyCustomPublicKeyContainer').style.display = 'none';
-        document.getElementById('encryptCustomPublicKeyContainer').style.display = 'none';
-        
-        console.log('UI initialized');
-    }
-
-    switchTab(tabName) {
-        // Update tab buttons
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-        
-        if (tabName === 'sign') {
-            document.getElementById('signTab').classList.add('active');
-            document.getElementById('signMode').classList.add('active');
-        } else if (tabName === 'verify') {
-            document.getElementById('verifyTab').classList.add('active');
-            document.getElementById('verifyMode').classList.add('active');
-        }
-        
-        this.state.currentTab = tabName;
-        console.log(`Switched to ${tabName} tab`);
-    }
-
-    showModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.classList.add('active');
-        }
-    }
-
-    hideModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.classList.remove('active');
-        }
-    }
-
-    setLoading(buttonId, isLoading) {
-        const button = document.getElementById(buttonId);
-        if (button) {
-            button.disabled = isLoading;
-            if (isLoading) {
-                button.setAttribute('data-original-text', button.textContent);
-                button.textContent = 'Processing...';
-            } else {
-                const originalText = button.getAttribute('data-original-text') || button.textContent;
-                button.textContent = originalText;
-                button.removeAttribute('data-original-text');
-            }
-        }
-    }
-
-    showError(message) {
-        console.error('Error:', message);
-        // You can implement a toast or notification system here
-        alert(`Error: ${message}`);
-    }
-
-    showSuccess(message) {
-        console.log('Success:', message);
-        // You can implement a toast or notification system here
-        // For now, just log to console
-    }
-
-    showOutput(outputId, title, content) {
-        const outputElement = document.getElementById(outputId);
-        if (outputElement) {
-            outputElement.innerHTML = `
-                <h4>${title}</h4>
-                <pre>${content}</pre>
-                <button onclick="navigator.clipboard.writeText(\`${content.replace(/`/g, '\\`')}\`)">Copy to Clipboard</button>
-            `;
-            outputElement.style.display = 'block';
-        }
-    }
-
-    showVerifyResult(outputId, result) {
-        const outputElement = document.getElementById(outputId);
-        if (outputElement) {
-            const isValid = result.valid;
-            const statusClass = isValid ? 'success' : 'error';
-            
-            outputElement.innerHTML = `
-                <h4>Verification Result</h4>
-                <div class="verify-result ${statusClass}">
-                    <p><strong>Status:</strong> ${isValid ? '✅ Valid' : '❌ Invalid'}</p>
-                    <p><strong>Message:</strong> ${result.message}</p>
-                    ${result.signer ? `<p><strong>Signer:</strong> ${result.signer}</p>` : ''}
-                </div>
-            `;
-            outputElement.style.display = 'block';
-        }
-    }
-
-    updateKeyInfo(keyPair) {
-        if (!keyPair || !keyPair.metadata) return;
-        
-        const keyInfo = document.getElementById('keyInfo');
-        if (keyInfo) {
-            document.getElementById('keyId').textContent = keyPair.metadata.keyId || '-';
-            document.getElementById('keyFingerprint').textContent = keyPair.metadata.fingerprint || '-';
-            document.getElementById('keyAlgorithm').textContent = keyPair.metadata.algorithm || '-';
-            document.getElementById('keyCreated').textContent = keyPair.metadata.created || '-';
-            keyInfo.style.display = 'block';
-        }
-    }
-
-    updateButtonStates() {
-        const hasKeys = this.state.currentKeyPair !== null;
-        
-        // Enable/disable buttons based on key availability
-        this.setButtonState('saveKeyBtn', hasKeys);
-        this.setButtonState('signBtnNew', hasKeys);
-        this.setButtonState('verifyBtn', true); // Can verify with custom key
-        this.setButtonState('encryptBtn', true); // Can encrypt with custom key
-        this.setButtonState('decryptBtn', hasKeys);
-        
-        // Update status indicators
-        this.updateStatusIndicators(hasKeys);
-    }
-
-    setButtonState(buttonId, enabled) {
-        const button = document.getElementById(buttonId);
-        if (button) {
-            button.disabled = !enabled;
-        }
-    }
-
-    updateStatusIndicators(hasKeys) {
-        const status = hasKeys ? 'Ready' : 'Keys Required';
-        const statusClass = hasKeys ? 'ready' : 'pending';
-        
-        this.updateStatus('keyStatus', hasKeys ? 'Keys Loaded' : 'No Keys', statusClass);
-        this.updateStatus('signVerifyStatus', status, statusClass);
-        this.updateStatus('encryptStatus', status, statusClass);
-        this.updateStatus('decryptStatus', status, statusClass);
-    }
-
-    updateStatus(statusId, text, className) {
-        const statusElement = document.getElementById(statusId);
-        if (statusElement) {
-            statusElement.textContent = text;
-            statusElement.className = `status ${className}`;
-        }
-    }
-
-    updateCurrentSettingsDisplay() {
-        const algorithmText = this.getAlgorithmDisplayText(this.state.advancedConfig.algorithm);
-        const expirationText = this.getExpirationDisplayText(this.state.advancedConfig.expiration);
-        const usageText = this.getUsageDisplayText(this.state.advancedConfig.usage);
-        
-        const currentAlgorithm = document.getElementById('currentAlgorithm');
-        const currentExpiration = document.getElementById('currentExpiration');
-        const currentUsage = document.getElementById('currentUsage');
-        
-        if (currentAlgorithm) currentAlgorithm.textContent = algorithmText;
-        if (currentExpiration) currentExpiration.textContent = expirationText;
-        if (currentUsage) currentUsage.textContent = usageText;
+        this.uiManager.showError(`Unexpected error: ${event.error?.message || 'Unknown error'}`);
     }
 
     // ==================== UTILITY METHODS ====================
@@ -625,6 +459,40 @@ class PGPApp {
         }
         
         return { name, email, passphrase };
+    }
+
+    updateButtonStates() {
+        const hasKeys = this.state.currentKeyPair !== null;
+        
+        // Enable/disable buttons based on key availability
+        this.uiManager.setButtonState('saveKeyBtn', hasKeys);
+        this.uiManager.setButtonState('signBtnNew', hasKeys);
+        this.uiManager.setButtonState('verifyBtn', true); // Can verify with custom key
+        this.uiManager.setButtonState('encryptBtn', true); // Can encrypt with custom key
+        this.uiManager.setButtonState('decryptBtn', hasKeys);
+        
+        // Update status indicators
+        this.updateStatusIndicators(hasKeys);
+    }
+
+    updateStatusIndicators(hasKeys) {
+        const status = hasKeys ? 'Ready' : 'Keys Required';
+        const statusClass = hasKeys ? 'ready' : 'pending';
+        
+        this.uiManager.updateStatus('keyStatus', hasKeys ? 'Keys Loaded' : 'No Keys', statusClass);
+        this.uiManager.updateStatus('signVerifyStatus', status, statusClass);
+        this.uiManager.updateStatus('encryptStatus', status, statusClass);
+        this.uiManager.updateStatus('decryptStatus', status, statusClass);
+    }
+
+    updateCurrentSettingsDisplay() {
+        const algorithmText = this.getAlgorithmDisplayText(this.state.advancedConfig.algorithm);
+        const expirationText = this.getExpirationDisplayText(this.state.advancedConfig.expiration);
+        const usageText = this.getUsageDisplayText(this.state.advancedConfig.usage);
+        
+        document.getElementById('currentAlgorithm').textContent = algorithmText;
+        document.getElementById('currentExpiration').textContent = expirationText;
+        document.getElementById('currentUsage').textContent = usageText;
     }
 
     getAlgorithmDisplayText(algorithm) {
@@ -654,16 +522,6 @@ class PGPApp {
         if (usage.certify) capabilities.push('Certify');
         return capabilities.join(', ') || 'None';
     }
-
-    // Debug methods
-    getStatus() {
-        return {
-            initialized: this.isInitialized,
-            hasKeys: this.state.currentKeyPair !== null,
-            currentTab: this.state.currentTab,
-            isGenerating: this.state.isGenerating
-        };
-    }
 }
 
 // Initialize the application when DOM is ready
@@ -674,11 +532,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.pgpApp = new PGPApp();
     await window.pgpApp.init();
     
-    // Expose for debugging
-    window.OpenPGPDemo = {
-        app: window.pgpApp,
-        getStatus: () => window.pgpApp.getStatus()
-    };
-    
-    console.log('PGP App ready! Access via window.pgpApp or window.OpenPGPDemo');
+    console.log('PGP App ready! Access via window.pgpApp');
 });
