@@ -4,6 +4,7 @@ import { CryptoOps } from './modules/cryptoOps.js';
 import { SignVerify } from './modules/signVerify.js';
 import { Encrypt } from './modules/encrypt.js';
 import { Decrypt } from './modules/decrypt.js';
+import { FileUtils } from './utils/fileUtils.js'; // Add this import
 import { Validation } from './utils/validation.js';
 import { Formatting } from './utils/formatting.js';
 import { Clipboard } from './utils/clipboard.js';
