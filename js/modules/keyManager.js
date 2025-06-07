@@ -1,9 +1,10 @@
 import { CONSTANTS } from '../utils/constants.js';
 import { Validation } from '../utils/validation.js';
 import { Formatting } from '../utils/formatting.js';
+import { FileUtils } from '../utils/fileUtils.js';
 
 export class KeyManager {
-    constructor() {
+    constructor(fileUtils = null) {
         this.currentKeyPair = null;
         this.advancedConfig = {
             algorithm: CONSTANTS.DEFAULT_ALGORITHM,
@@ -17,8 +18,8 @@ export class KeyManager {
             comment: ''
         };
         
-        // Initialize FileUtils for file operations
-        this.fileUtils = new FileUtils();
+        // Use provided fileUtils or create new instance
+        this.fileUtils = fileUtils || new FileUtils();
     }
 
     // Generate new key pair
@@ -81,18 +82,68 @@ export class KeyManager {
         }
     }
 
-    // Save key pair to file (delegates to FileUtils)
-    async saveKeyPairToFile(keyPair = null, filename = null) {
+    // Main saveKeyPair method - supports both JSON and individual file formats
+    async saveKeyPair(keyPair = null, filename = null, format = 'json') {
         try {
             const targetKeyPair = keyPair || this.currentKeyPair;
             if (!targetKeyPair) {
                 throw new Error('No key pair available to save');
             }
             
-            return await this.fileUtils.saveKeyPairToFile(targetKeyPair, filename);
+            // Use the fileUtils that was passed to the constructor
+            const result = await this.fileUtils.saveKeyPairToFile(targetKeyPair, filename, format);
+            
+            console.log('Key pair saved successfully:', result);
+            return result;
+            
         } catch (error) {
-            console.error('Failed to save key pair to file:', error);
-            throw new Error(`Save failed: ${error.message}`);
+            console.error('KeyManager: Failed to save key pair:', error);
+            throw new Error(`Failed to save key pair: ${error.message}`);
+        }
+    }
+
+    // Legacy method for backward compatibility
+    async saveKeyPairToFile(keyPair = null, filename = null) {
+        return await this.saveKeyPair(keyPair, filename, 'json');
+    }
+
+    // Enhanced loadKeyPair method that handles both JSON and armored formats
+    async loadKeyPair(file) {
+        if (!file) {
+            throw new Error('No file provided to load');
+        }
+        
+        try {
+            // Load the key data using fileUtils
+            const keyData = await this.fileUtils.loadKeyFromFile(file);
+            
+            // If it's a JSON format, we need to reconstruct the key pair
+            if (keyData.isJsonFormat && keyData.keyData) {
+                const keyPair = {
+                    publicKey: keyData.keyData.keys.publicKey,
+                    privateKey: keyData.keyData.keys.privateKey,
+                    metadata: keyData.keyData.metadata
+                };
+                
+                // Parse key objects for full compatibility
+                if (keyPair.privateKey) {
+                    keyPair.privateKeyObj = await openpgp.readPrivateKey({ armoredKey: keyPair.privateKey });
+                }
+                if (keyPair.publicKey) {
+                    keyPair.publicKeyObj = await openpgp.readKey({ armoredKey: keyPair.publicKey });
+                }
+                
+                console.log('Key pair loaded from JSON:', keyPair);
+                this.currentKeyPair = keyPair;
+                return keyPair;
+            } else {
+                // For armored keys, use the existing logic
+                return await this.loadKeyFromFile(file);
+            }
+            
+        } catch (error) {
+            console.error('KeyManager: Failed to load key pair:', error);
+            throw new Error(`Failed to load key pair: ${error.message}`);
         }
     }
 
@@ -133,7 +184,7 @@ export class KeyManager {
         }
     }
 
-    // Load key from file (delegates to FileUtils)
+    // Load key from file (handles armored format)
     async loadKeyFromFile(file) {
         try {
             const keyData = await this.fileUtils.loadKeyFromFile(file);
@@ -179,17 +230,36 @@ export class KeyManager {
                 throw new Error('File does not contain a valid PGP key');
             }
             
-            return {
-                keyPair,
-                fileInfo: {
-                    filename: keyData.filename,
-                    size: keyData.size,
-                    lastModified: keyData.lastModified
-                }
-            };
+            this.currentKeyPair = keyPair;
+            return keyPair;
         } catch (error) {
             console.error('Failed to load key from file:', error);
             throw new Error(`Key load failed: ${error.message}`);
+        }
+    }
+
+    // Helper method to extract metadata from OpenPGP key
+    extractKeyMetadata(key) {
+        try {
+            const primaryUser = key.getPrimaryUser();
+            const userIds = key.getUserIDs();
+            
+            return {
+                keyId: key.getKeyID().toHex().toUpperCase(),
+                fingerprint: key.getFingerprint().toUpperCase(),
+                algorithm: key.getAlgorithmInfo().algorithm,
+                created: key.getCreationTime(),
+                userIds: userIds
+            };
+        } catch (error) {
+            console.warn('Could not extract key metadata:', error);
+            return {
+                keyId: 'Unknown',
+                fingerprint: 'Unknown', 
+                algorithm: 'Unknown',
+                created: new Date(),
+                userIds: []
+            };
         }
     }
 

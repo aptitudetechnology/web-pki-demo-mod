@@ -1,9 +1,10 @@
 import { CONSTANTS } from '../utils/constants.js';
 import { Validation } from '../utils/validation.js';
 import { Formatting } from '../utils/formatting.js';
+import { FileUtils } from '../utils/fileUtils.js'; // Add this import
 
 export class KeyManager {
-    constructor() {
+    constructor(fileUtils = null) { // Accept fileUtils as parameter
         this.currentKeyPair = null;
         this.advancedConfig = {
             algorithm: CONSTANTS.DEFAULT_ALGORITHM,
@@ -17,8 +18,8 @@ export class KeyManager {
             comment: ''
         };
         
-        // Initialize FileUtils for file operations
-        this.fileUtils = new FileUtils();
+        // Use provided fileUtils or create new instance
+        this.fileUtils = fileUtils || new FileUtils();
     }
 
     // Generate new key pair
@@ -81,6 +82,11 @@ export class KeyManager {
         }
     }
 
+    // ADD THIS METHOD - This is what app.js is calling
+    async saveKeyPair(keyPair = null, filename = null) {
+        return await this.saveKeyPairToFile(keyPair, filename);
+    }
+
     // Save key pair to file (delegates to FileUtils)
     async saveKeyPairToFile(keyPair = null, filename = null) {
         try {
@@ -94,6 +100,11 @@ export class KeyManager {
             console.error('Failed to save key pair to file:', error);
             throw new Error(`Save failed: ${error.message}`);
         }
+    }
+
+    // ADD THIS METHOD - For loading (app.js calls loadKeyPair)
+    async loadKeyPair(file) {
+        return await this.loadKeyFromFile(file);
     }
 
     // Save individual keys to separate files
@@ -179,14 +190,9 @@ export class KeyManager {
                 throw new Error('File does not contain a valid PGP key');
             }
             
-            return {
-                keyPair,
-                fileInfo: {
-                    filename: keyData.filename,
-                    size: keyData.size,
-                    lastModified: keyData.lastModified
-                }
-            };
+            // For compatibility with app.js, return just the keyPair
+            // (not wrapped in an object with fileInfo)
+            return keyPair;
         } catch (error) {
             console.error('Failed to load key from file:', error);
             throw new Error(`Key load failed: ${error.message}`);
