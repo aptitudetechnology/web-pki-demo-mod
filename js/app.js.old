@@ -38,11 +38,11 @@ export class App {
             this.encrypt = new Encrypt(this.keyManager, this.cryptoOps);
             this.decrypt = new Decrypt(this.keyManager, this.cryptoOps);
 
-            // Initialize all modules
-            await this.keyManager.init();
-            this.signVerify.init();
-            this.encrypt.init();
-            this.decrypt.init();
+            // Initialize modules that have init methods
+            // Remove: await this.keyManager.init(); // KeyManager doesn't have init method
+            if (this.signVerify.init) this.signVerify.init();
+            if (this.encrypt.init) this.encrypt.init();
+            if (this.decrypt.init) this.decrypt.init();
 
             // Setup global event listeners
             this.setupGlobalEventListeners();
@@ -102,9 +102,9 @@ export class App {
         const hasKeys = this.keyManager?.hasKeys() || false;
         
         // Update all operation modules
-        if (this.signVerify) this.signVerify.updateUI();
-        if (this.encrypt) this.encrypt.updateUI();
-        if (this.decrypt) this.decrypt.updateUI();
+        if (this.signVerify && this.signVerify.updateUI) this.signVerify.updateUI();
+        if (this.encrypt && this.encrypt.updateUI) this.encrypt.updateUI();
+        if (this.decrypt && this.decrypt.updateUI) this.decrypt.updateUI();
 
         // Update global status indicators
         this.updateGlobalStatus(hasKeys);
@@ -163,9 +163,9 @@ export class App {
 
     // Reset all operations
     resetAll() {
-        if (this.signVerify) this.signVerify.reset();
-        if (this.encrypt) this.encrypt.reset();
-        if (this.decrypt) this.decrypt.reset();
+        if (this.signVerify && this.signVerify.reset) this.signVerify.reset();
+        if (this.encrypt && this.encrypt.reset) this.encrypt.reset();
+        if (this.decrypt && this.decrypt.reset) this.decrypt.reset();
         
         console.log('All operations reset');
     }

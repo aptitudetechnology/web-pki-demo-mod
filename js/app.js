@@ -1,215 +1,536 @@
+// app.js - Main application controller with centralized event handling
 import { KeyManager } from './modules/keyManager.js';
 import { CryptoOps } from './modules/cryptoOps.js';
 import { SignVerify } from './modules/signVerify.js';
 import { Encrypt } from './modules/encrypt.js';
 import { Decrypt } from './modules/decrypt.js';
+import { UIManager } from './modules/uiManager.js';
+import { ModalManager } from './modules/modalManager.js';
+import { TabManager } from './modules/tabManager.js';
 import { Validation } from './utils/validation.js';
 import { Formatting } from './utils/formatting.js';
 import { Clipboard } from './utils/clipboard.js';
 
-export class App {
+class PGPApp {
     constructor() {
-        this.keyManager = null;
-        this.cryptoOps = null;
-        this.signVerify = null;
-        this.encrypt = null;
-        this.decrypt = null;
+        // Initialize modules
+        this.keyManager = new KeyManager();
+        this.cryptoOps = new CryptoOps();
+        this.signVerify = new SignVerify();
+        this.encrypt = new Encrypt();
+        this.decrypt = new Decrypt();
+        this.uiManager = new UIManager();
+        this.modalManager = new ModalManager();
+        this.tabManager = new TabManager();
+        
+        // Application state
+        this.state = {
+            currentKeyPair: null,
+            isGenerating: false,
+            advancedConfig: {
+                algorithm: 'ecc',
+                keySize: null,
+                expiration: 63072000, // 2 years
+                usage: {
+                    sign: true,
+                    encrypt: true,
+                    certify: true
+                },
+                comment: ''
+            },
+            currentTab: 'sign'
+        };
+        
         this.isInitialized = false;
     }
 
-    // Initialize the application
     async init() {
         try {
-            console.log('Initializing OpenPGP.js web PKI Demo...');
-
+            console.log('Initializing PGP App...');
+            
             // Check if OpenPGP.js is loaded
             if (typeof openpgp === 'undefined') {
                 throw new Error('OpenPGP.js library not loaded');
             }
 
-            console.log('OpenPGP.js version:', openpgp.version || 'Unknown');
-
-            // Initialize core modules
-            this.keyManager = new KeyManager();
-            this.cryptoOps = new CryptoOps();
-
-            // Initialize operation modules
-            this.signVerify = new SignVerify(this.keyManager, this.cryptoOps);
-            this.encrypt = new Encrypt(this.keyManager, this.cryptoOps);
-            this.decrypt = new Decrypt(this.keyManager, this.cryptoOps);
-
-            // Initialize modules that have init methods
-            // Remove: await this.keyManager.init(); // KeyManager doesn't have init method
-            if (this.signVerify.init) this.signVerify.init();
-            if (this.encrypt.init) this.encrypt.init();
-            if (this.decrypt.init) this.decrypt.init();
-
-            // Setup global event listeners
-            this.setupGlobalEventListeners();
-
-            // Initialize UI state
-            this.updateGlobalUI();
-
+            // Setup all event listeners
+            this.setupEventListeners();
+            
+            // Initialize UI
+            this.uiManager.initializeUI();
+            
             this.isInitialized = true;
-            console.log('OpenPGP.js Demo initialized successfully');
-
+            console.log('PGP App initialized successfully');
+            
         } catch (error) {
             console.error('Failed to initialize application:', error);
-            this.showGlobalError(`Failed to initialize application: ${error.message}`);
+            this.uiManager.showError(`Failed to initialize: ${error.message}`);
         }
     }
 
-    // Setup global event listeners
-    setupGlobalEventListeners() {
-        // Listen for key events from KeyManager
-        document.addEventListener('keysGenerated', (event) => {
-            console.log('Keys generated event received:', event.detail);
-            this.updateGlobalUI();
-        });
-
-        document.addEventListener('keysLoaded', (event) => {
-            console.log('Keys loaded event received:', event.detail);
-            this.updateGlobalUI();
-        });
-
-        document.addEventListener('keysCleared', (event) => {
-            console.log('Keys cleared event received');
-            this.updateGlobalUI();
-        });
-
-        // Global error handling
-        window.addEventListener('error', (e) => {
-            console.error('Global error:', e.error);
-            this.handleGlobalError(e.error);
-        });
-
-        // Handle unhandled promise rejections
-        window.addEventListener('unhandledrejection', (e) => {
-            console.error('Unhandled promise rejection:', e.reason);
-            this.handleGlobalError(e.reason);
-        });
-
-        // Escape key to close modals or reset states
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                this.handleEscapeKey();
+    // ==================== EVENT LISTENER SETUP ====================
+    setupEventListeners() {
+        // Key Generation Events
+        this.bindElement('generateBtn', 'click', this.handleGenerateClick.bind(this));
+        
+        // Advanced Options Events
+        this.bindElement('enableAdvancedOptions', 'change', this.handleAdvancedOptionsToggle.bind(this));
+        
+        // Modal Events
+        this.bindElement('modalClose', 'click', () => this.modalManager.hideModal('advancedOptionsModal'));
+        this.bindElement('modalCancel', 'click', () => this.modalManager.hideModal('advancedOptionsModal'));
+        this.bindElement('modalApply', 'click', this.handleModalApply.bind(this));
+        
+        // File Operation Events
+        this.bindElement('saveKeyBtn', 'click', this.handleSaveKey.bind(this));
+        this.bindElement('loadKeyBtn', 'click', () => document.getElementById('keyFileInput').click());
+        this.bindElement('keyFileInput', 'change', this.handleFileLoad.bind(this));
+        
+        // Tab Events
+        this.bindElement('signTab', 'click', () => this.tabManager.switchTab('sign'));
+        this.bindElement('verifyTab', 'click', () => this.tabManager.switchTab('verify'));
+        
+        // Sign/Verify Events
+        this.bindElement('signBtnNew', 'click', this.handleSignMessage.bind(this));
+        this.bindElement('verifyBtn', 'click', this.handleVerifyMessage.bind(this));
+        this.bindElement('toggleVerifyPublicKeyBtn', 'click', this.handleToggleVerifyPublicKey.bind(this));
+        
+        // Encryption Events
+        this.bindElement('encryptBtn', 'click', this.handleEncrypt.bind(this));
+        this.bindElement('toggleEncryptPublicKeyBtn', 'click', this.handleToggleEncryptPublicKey.bind(this));
+        
+        // Decryption Events
+        this.bindElement('decryptBtn', 'click', this.handleDecrypt.bind(this));
+        
+        // Advanced Options Form Events
+        this.bindAdvancedOptionsEvents();
+        
+        // Global Events
+        document.addEventListener('keydown', this.handleGlobalKeydown.bind(this));
+        window.addEventListener('error', this.handleGlobalError.bind(this));
+        
+        // Modal overlay click to close
+        this.bindElement('advancedOptionsModal', 'click', (e) => {
+            if (e.target.id === 'advancedOptionsModal') {
+                this.modalManager.hideModal('advancedOptionsModal');
             }
         });
+        
+        console.log('All event listeners setup complete');
     }
 
-    // Update global UI state
-    updateGlobalUI() {
-        const hasKeys = this.keyManager?.hasKeys() || false;
-        
-        // Update all operation modules
-        if (this.signVerify && this.signVerify.updateUI) this.signVerify.updateUI();
-        if (this.encrypt && this.encrypt.updateUI) this.encrypt.updateUI();
-        if (this.decrypt && this.decrypt.updateUI) this.decrypt.updateUI();
-
-        // Update global status indicators
-        this.updateGlobalStatus(hasKeys);
-    }
-
-    // Update global status indicators
-    updateGlobalStatus(hasKeys) {
-        // You can add global status updates here if needed
-        // For now, individual modules handle their own status
-        
-        if (hasKeys) {
-            console.log('Keys are available - all operations enabled');
+    // Helper method to safely bind events
+    bindElement(id, event, handler) {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener(event, handler);
+            console.log(`Bound ${event} event to #${id}`);
         } else {
-            console.log('No keys available - operations limited');
+            console.warn(`Element #${id} not found for event binding`);
         }
     }
 
-    // Handle global errors
-    handleGlobalError(error) {
-        // Don't show duplicate errors or errors during key generation
-        if (this.keyManager?.isGenerating) {
+    // Bind advanced options form events
+    bindAdvancedOptionsEvents() {
+        // Algorithm radio buttons
+        const algorithmRadios = document.querySelectorAll('input[name="algorithm"]');
+        algorithmRadios.forEach(radio => {
+            radio.addEventListener('change', this.handleAlgorithmChange.bind(this));
+        });
+        
+        // Key expiration
+        this.bindElement('keyExpiration', 'change', this.handleExpirationChange.bind(this));
+        
+        // Usage checkboxes
+        this.bindElement('usageSign', 'change', this.handleUsageChange.bind(this));
+        this.bindElement('usageEncrypt', 'change', this.handleUsageChange.bind(this));
+        this.bindElement('usageCertify', 'change', this.handleUsageChange.bind(this));
+        
+        // Comment field
+        this.bindElement('keyComment', 'input', this.handleCommentChange.bind(this));
+    }
+
+    // ==================== EVENT HANDLERS ====================
+    
+    async handleGenerateClick() {
+        try {
+            this.uiManager.setLoading('generateBtn', true);
+            this.state.isGenerating = true;
+            
+            // Validate user input
+            const userInfo = this.validateUserInput();
+            
+            // Generate key pair using KeyManager
+            const keyPair = await this.keyManager.generateKeyPair(userInfo, this.state.advancedConfig);
+            
+            // Update application state
+            this.state.currentKeyPair = keyPair;
+            
+            // Update UI
+            this.uiManager.updateKeyInfo(keyPair);
+            this.uiManager.showSuccess('Key pair generated successfully!');
+            this.updateButtonStates();
+            
+            console.log('Key pair generated successfully');
+            
+        } catch (error) {
+            console.error('Key generation failed:', error);
+            this.uiManager.showError(`Key generation failed: ${error.message}`);
+        } finally {
+            this.uiManager.setLoading('generateBtn', false);
+            this.state.isGenerating = false;
+        }
+    }
+
+    handleAdvancedOptionsToggle(event) {
+        const isEnabled = event.target.checked;
+        const advancedDesc = document.getElementById('advanced-desc');
+        const currentSettingsDisplay = document.getElementById('currentSettingsDisplay');
+        
+        if (isEnabled) {
+            advancedDesc.classList.remove('hidden');
+            currentSettingsDisplay.style.display = 'block';
+            this.modalManager.showModal('advancedOptionsModal');
+            this.updateCurrentSettingsDisplay();
+        } else {
+            advancedDesc.classList.add('hidden');
+            currentSettingsDisplay.style.display = 'none';
+        }
+    }
+
+    handleModalApply() {
+        this.updateCurrentSettingsDisplay();
+        this.modalManager.hideModal('advancedOptionsModal');
+        this.uiManager.showSuccess('Advanced settings applied');
+    }
+
+    async handleSaveKey() {
+        if (!this.state.currentKeyPair) {
+            this.uiManager.showError('No key pair to save');
             return;
         }
-
-        console.error('Handling global error:', error);
         
-        // Show user-friendly error message
-        let errorMessage = 'An unexpected error occurred.';
-        if (error && error.message) {
-            errorMessage = error.message;
-        }
-
-        this.showGlobalError(errorMessage);
-    }
-
-    // Show global error message
-    showGlobalError(message) {
-        // You can implement a global error display here
-        // For now, we'll use console and alert as fallback
-        console.error('Global error:', message);
-        
-        // Only show alert for critical errors
-        if (message.includes('Failed to initialize') || message.includes('OpenPGP.js library not loaded')) {
-            alert(`Critical Error: ${message}\n\nPlease refresh the page and try again.`);
+        try {
+            await this.keyManager.saveKeyPair(this.state.currentKeyPair);
+            this.uiManager.showSuccess('Key pair saved successfully');
+        } catch (error) {
+            console.error('Save failed:', error);
+            this.uiManager.showError(`Save failed: ${error.message}`);
         }
     }
 
-    // Handle escape key presses
-    handleEscapeKey() {
-        // Close any open modals
-        const modal = document.getElementById('advancedOptionsModal');
-        if (modal && modal.classList.contains('active')) {
-            this.keyManager.hideAdvancedModal();
+    async handleFileLoad(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        try {
+            this.uiManager.setLoading('loadKeyBtn', true);
+            
+            const keyPair = await this.keyManager.loadKeyPair(file);
+            this.state.currentKeyPair = keyPair;
+            
+            this.uiManager.updateKeyInfo(keyPair);
+            this.uiManager.showSuccess('Key pair loaded successfully');
+            this.updateButtonStates();
+            
+        } catch (error) {
+            console.error('Load failed:', error);
+            this.uiManager.showError(`Load failed: ${error.message}`);
+        } finally {
+            this.uiManager.setLoading('loadKeyBtn', false);
         }
     }
 
-    // Reset all operations
-    resetAll() {
-        if (this.signVerify && this.signVerify.reset) this.signVerify.reset();
-        if (this.encrypt && this.encrypt.reset) this.encrypt.reset();
-        if (this.decrypt && this.decrypt.reset) this.decrypt.reset();
+    async handleSignMessage() {
+        if (!this.state.currentKeyPair) {
+            this.uiManager.showError('No key pair loaded for signing');
+            return;
+        }
         
-        console.log('All operations reset');
+        try {
+            const message = document.getElementById('messageToSignNew').value.trim();
+            if (!message) {
+                this.uiManager.showError('Please enter a message to sign');
+                return;
+            }
+            
+            this.uiManager.setLoading('signBtnNew', true);
+            
+            const signedMessage = await this.signVerify.signMessage(message, this.state.currentKeyPair);
+            
+            this.uiManager.showOutput('signOutputNew', 'Signed Message:', signedMessage);
+            this.uiManager.showSuccess('Message signed successfully');
+            
+        } catch (error) {
+            console.error('Signing failed:', error);
+            this.uiManager.showError(`Signing failed: ${error.message}`);
+        } finally {
+            this.uiManager.setLoading('signBtnNew', false);
+        }
     }
 
-    // Get application status
-    getStatus() {
-        return {
-            initialized: this.isInitialized,
-            hasKeys: this.keyManager?.hasKeys() || false,
-            keyManager: this.keyManager?.getStatus() || null,
-            signVerify: this.signVerify?.getStatus() || null,
-            encrypt: this.encrypt?.getStatus() || null,
-            decrypt: this.decrypt?.getStatus() || null
+    async handleVerifyMessage() {
+        try {
+            const signedMessage = document.getElementById('signedMessageToVerify').value.trim();
+            if (!signedMessage) {
+                this.uiManager.showError('Please enter a signed message to verify');
+                return;
+            }
+            
+            this.uiManager.setLoading('verifyBtn', true);
+            
+            // Check if using custom public key
+            const customKeyContainer = document.getElementById('verifyCustomPublicKeyContainer');
+            let publicKey = null;
+            
+            if (customKeyContainer.style.display !== 'none') {
+                const customKeyText = document.getElementById('verifyCustomPublicKey').value.trim();
+                if (customKeyText) {
+                    publicKey = customKeyText;
+                }
+            } else if (this.state.currentKeyPair) {
+                publicKey = this.state.currentKeyPair.publicKey;
+            }
+            
+            const result = await this.signVerify.verifyMessage(signedMessage, publicKey);
+            
+            this.uiManager.showVerifyResult('verifyOutput', result);
+            
+        } catch (error) {
+            console.error('Verification failed:', error);
+            this.uiManager.showError(`Verification failed: ${error.message}`);
+        } finally {
+            this.uiManager.setLoading('verifyBtn', false);
+        }
+    }
+
+    handleToggleVerifyPublicKey() {
+        const container = document.getElementById('verifyCustomPublicKeyContainer');
+        const button = document.getElementById('toggleVerifyPublicKeyBtn');
+        
+        if (container.style.display === 'none') {
+            container.style.display = 'block';
+            button.textContent = 'Use Own Public Key';
+        } else {
+            container.style.display = 'none';
+            button.textContent = 'Use Custom Public Key';
+        }
+    }
+
+    async handleEncrypt() {
+        try {
+            const message = document.getElementById('messageToEncrypt').value.trim();
+            if (!message) {
+                this.uiManager.showError('Please enter a message to encrypt');
+                return;
+            }
+            
+            this.uiManager.setLoading('encryptBtn', true);
+            
+            // Check if using custom public key
+            const customKeyContainer = document.getElementById('encryptCustomPublicKeyContainer');
+            let publicKey = null;
+            
+            if (customKeyContainer.style.display !== 'none') {
+                const customKeyText = document.getElementById('encryptCustomPublicKey').value.trim();
+                if (customKeyText) {
+                    publicKey = customKeyText;
+                }
+            } else if (this.state.currentKeyPair) {
+                publicKey = this.state.currentKeyPair.publicKey;
+            }
+            
+            if (!publicKey) {
+                this.uiManager.showError('No public key available for encryption');
+                return;
+            }
+            
+            const encryptedMessage = await this.encrypt.encryptMessage(message, publicKey);
+            
+            this.uiManager.showOutput('encryptOutput', 'Encrypted Message:', encryptedMessage);
+            this.uiManager.showSuccess('Message encrypted successfully');
+            
+        } catch (error) {
+            console.error('Encryption failed:', error);
+            this.uiManager.showError(`Encryption failed: ${error.message}`);
+        } finally {
+            this.uiManager.setLoading('encryptBtn', false);
+        }
+    }
+
+    handleToggleEncryptPublicKey() {
+        const container = document.getElementById('encryptCustomPublicKeyContainer');
+        const button = document.getElementById('toggleEncryptPublicKeyBtn');
+        
+        if (container.style.display === 'none') {
+            container.style.display = 'block';
+            button.textContent = 'Use Own Public Key';
+        } else {
+            container.style.display = 'none';
+            button.textContent = 'Use Custom Public Key';
+        }
+    }
+
+    async handleDecrypt() {
+        if (!this.state.currentKeyPair) {
+            this.uiManager.showError('No private key loaded for decryption');
+            return;
+        }
+        
+        try {
+            const encryptedMessage = document.getElementById('messageToDecrypt').value.trim();
+            if (!encryptedMessage) {
+                this.uiManager.showError('Please enter an encrypted message to decrypt');
+                return;
+            }
+            
+            this.uiManager.setLoading('decryptBtn', true);
+            
+            const decryptedMessage = await this.decrypt.decryptMessage(encryptedMessage, this.state.currentKeyPair);
+            
+            this.uiManager.showOutput('decryptOutput', 'Decrypted Message:', decryptedMessage);
+            this.uiManager.showSuccess('Message decrypted successfully');
+            
+        } catch (error) {
+            console.error('Decryption failed:', error);
+            this.uiManager.showError(`Decryption failed: ${error.message}`);
+        } finally {
+            this.uiManager.setLoading('decryptBtn', false);
+        }
+    }
+
+    // Advanced options handlers
+    handleAlgorithmChange(event) {
+        this.state.advancedConfig.algorithm = event.target.value;
+        console.log('Algorithm changed to:', event.target.value);
+    }
+
+    handleExpirationChange(event) {
+        this.state.advancedConfig.expiration = parseInt(event.target.value);
+        console.log('Expiration changed to:', event.target.value);
+    }
+
+    handleUsageChange() {
+        this.state.advancedConfig.usage = {
+            sign: document.getElementById('usageSign').checked,
+            encrypt: document.getElementById('usageEncrypt').checked,
+            certify: document.getElementById('usageCertify').checked
         };
+        console.log('Usage changed to:', this.state.advancedConfig.usage);
     }
 
-    // Export current state for debugging
-    exportDebugInfo() {
-        return {
-            timestamp: new Date().toISOString(),
-            status: this.getStatus(),
-            openpgpVersion: typeof openpgp !== 'undefined' ? (openpgp.version || 'Unknown') : 'Not loaded',
-            userAgent: navigator.userAgent,
-            hasKeys: this.keyManager?.hasKeys() || false,
-            keyInfo: this.keyManager?.getCurrentKeyInfo() || null
-        };
+    handleCommentChange(event) {
+        this.state.advancedConfig.comment = event.target.value;
+        console.log('Comment changed to:', event.target.value);
+    }
+
+    // Global event handlers
+    handleGlobalKeydown(event) {
+        if (event.key === 'Escape') {
+            // Close any open modals
+            this.modalManager.hideModal('advancedOptionsModal');
+        }
+    }
+
+    handleGlobalError(event) {
+        console.error('Global error:', event.error);
+        this.uiManager.showError(`Unexpected error: ${event.error?.message || 'Unknown error'}`);
+    }
+
+    // ==================== UTILITY METHODS ====================
+    
+    validateUserInput() {
+        const name = document.getElementById('userName').value.trim();
+        const email = document.getElementById('userEmail').value.trim();
+        const passphrase = document.getElementById('passphrase').value;
+        
+        if (!name) throw new Error('Name is required');
+        if (!email) throw new Error('Email is required');
+        if (!passphrase) throw new Error('Passphrase is required');
+        
+        // Basic email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            throw new Error('Please enter a valid email address');
+        }
+        
+        if (passphrase.length < 8) {
+            throw new Error('Passphrase must be at least 8 characters long');
+        }
+        
+        return { name, email, passphrase };
+    }
+
+    updateButtonStates() {
+        const hasKeys = this.state.currentKeyPair !== null;
+        
+        // Enable/disable buttons based on key availability
+        this.uiManager.setButtonState('saveKeyBtn', hasKeys);
+        this.uiManager.setButtonState('signBtnNew', hasKeys);
+        this.uiManager.setButtonState('verifyBtn', true); // Can verify with custom key
+        this.uiManager.setButtonState('encryptBtn', true); // Can encrypt with custom key
+        this.uiManager.setButtonState('decryptBtn', hasKeys);
+        
+        // Update status indicators
+        this.updateStatusIndicators(hasKeys);
+    }
+
+    updateStatusIndicators(hasKeys) {
+        const status = hasKeys ? 'Ready' : 'Keys Required';
+        const statusClass = hasKeys ? 'ready' : 'pending';
+        
+        this.uiManager.updateStatus('keyStatus', hasKeys ? 'Keys Loaded' : 'No Keys', statusClass);
+        this.uiManager.updateStatus('signVerifyStatus', status, statusClass);
+        this.uiManager.updateStatus('encryptStatus', status, statusClass);
+        this.uiManager.updateStatus('decryptStatus', status, statusClass);
+    }
+
+    updateCurrentSettingsDisplay() {
+        const algorithmText = this.getAlgorithmDisplayText(this.state.advancedConfig.algorithm);
+        const expirationText = this.getExpirationDisplayText(this.state.advancedConfig.expiration);
+        const usageText = this.getUsageDisplayText(this.state.advancedConfig.usage);
+        
+        document.getElementById('currentAlgorithm').textContent = algorithmText;
+        document.getElementById('currentExpiration').textContent = expirationText;
+        document.getElementById('currentUsage').textContent = usageText;
+    }
+
+    getAlgorithmDisplayText(algorithm) {
+        switch (algorithm) {
+            case 'ecc': return 'ECC (Curve25519)';
+            case 'rsa2048': return 'RSA 2048-bit';
+            case 'rsa4096': return 'RSA 4096-bit';
+            default: return 'ECC (Curve25519)';
+        }
+    }
+
+    getExpirationDisplayText(expiration) {
+        switch (expiration) {
+            case 0: return 'Never expires';
+            case 31536000: return '1 year';
+            case 63072000: return '2 years';
+            case 94608000: return '3 years';
+            case 157680000: return '5 years';
+            default: return '2 years';
+        }
+    }
+
+    getUsageDisplayText(usage) {
+        const capabilities = [];
+        if (usage.sign) capabilities.push('Sign');
+        if (usage.encrypt) capabilities.push('Encrypt');
+        if (usage.certify) capabilities.push('Certify');
+        return capabilities.join(', ') || 'None';
     }
 }
 
 // Initialize the application when DOM is ready
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('DOM loaded, initializing OpenPGP.js Demo...');
+    console.log('DOM loaded, initializing PGP App...');
     
     // Create and initialize the main app
-    const app = new App();
-    await app.init();
+    window.pgpApp = new PGPApp();
+    await window.pgpApp.init();
     
-    // Expose app instance for debugging
-    window.OpenPGPDemo = {
-        app: app,
-        getStatus: () => app.getStatus(),
-        exportDebugInfo: () => app.exportDebugInfo(),
-        reset: () => app.resetAll()
-    };
-    
-    console.log('OpenPGP.js Demo ready! Access debugging info via window.OpenPGPDemo');
+    console.log('PGP App ready! Access via window.pgpApp');
 });
