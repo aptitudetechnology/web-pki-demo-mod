@@ -226,4 +226,12 @@ ${keyPair.publicKey}
 }
 
 // Export for use in other modules
-window.FileUtils = FileUtils;
+//window.FileUtils = FileUtils;
+
+// ES6 Module Export (use this instead of window.FileUtils)
+export { FileUtils };
+
+// For backward compatibility with non-module scripts
+if (typeof window !== 'undefined') {
+    window.FileUtils = FileUtils;
+}
