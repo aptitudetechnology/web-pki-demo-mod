@@ -10,7 +10,7 @@ export class SignVerify {
         this.useCustomPublicKey = false;
     }
 
-    // Initialize sign & verify functionality
+    // Initialize sign & verify functionalityValidate message
     init() {
         this.setupEventListeners();
         this.updateUI();
@@ -64,6 +64,95 @@ export class SignVerify {
             button.textContent = 'Use Custom Public Key';
         }
     }
+
+// Add these methods to your SignVerify class
+
+// Direct method for signing (used by app.js)
+async signMessage(message, keyPair) {
+    try {
+        // Validate message
+        if (!message || typeof message !== 'string') {
+            throw new Error('Valid message string is required');
+        }
+
+        // Validate keyPair
+        if (!keyPair || !keyPair.privateKey) {
+            throw new Error('Valid key pair with private key is required');
+        }
+
+        // Extract the private key
+        const privateKey = typeof keyPair.privateKey === 'string' 
+            ? await openpgp.readPrivateKey({ armoredKey: keyPair.privateKey })
+            : keyPair.privateKey;
+
+        // Create message object
+        const messageObj = await openpgp.createMessage({ text: message });
+
+        // Sign the message
+        const signed = await openpgp.sign({
+            message: messageObj,
+            signingKeys: privateKey
+        });
+
+        return signed;
+    } catch (error) {
+        throw new Error(`Failed to sign message: ${error.message}`);
+    }
+}
+
+// Direct method for verifying (used by app.js)
+async verifyMessage(signedMessage, publicKey) {
+    try {
+        // Validate inputs
+        if (!signedMessage || typeof signedMessage !== 'string') {
+            throw new Error('Valid signed message is required');
+        }
+
+        if (!publicKey) {
+            throw new Error('Public key is required for verification');
+        }
+
+        // Handle public key (could be string or key object)
+        const pubKey = typeof publicKey === 'string' 
+            ? await openpgp.readKey({ armoredKey: publicKey })
+            : publicKey;
+
+        // Read the signed message
+        const message = await openpgp.readMessage({ armoredMessage: signedMessage });
+
+        // Verify the signature
+        const verification = await openpgp.verify({
+            message,
+            verificationKeys: pubKey
+        });
+
+        // Check if we have signatures
+        if (!verification.signatures || verification.signatures.length === 0) {
+            return {
+                valid: false,
+                message: 'No signatures found in the message',
+                signer: null
+            };
+        }
+
+        const signature = verification.signatures[0];
+        const isValid = await signature.verified;
+
+        return {
+            valid: isValid,
+            message: isValid ? 'Signature is valid' : 'Signature is invalid',
+            signer: signature.keyID ? signature.keyID.toHex() : null
+        };
+
+    } catch (error) {
+        return {
+            valid: false,
+            message: `Verification failed: ${error.message}`,
+            signer: null
+        };
+    }
+}
+
 
     // Handle message signing
     async handleSign() {
