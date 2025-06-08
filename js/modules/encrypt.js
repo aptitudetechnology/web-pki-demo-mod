@@ -21,8 +21,8 @@ export class Encrypt {
  //      document.getElementById('encryptBtn').addEventListener('click', () => this.handleEncrypt());
 
         // Toggle custom public key
-        document.getElementById('toggleEncryptPublicKeyBtn').addEventListener('click', () => {
-            this.toggleCustomPublicKey();
+      //  document.getElementById('toggleEncryptPublicKeyBtn').addEventListener('click', () => {
+       //     this.toggleCustomPublicKey();
         });
     }
 
