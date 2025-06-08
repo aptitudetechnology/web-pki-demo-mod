@@ -15,7 +15,7 @@ export const Clipboard = {
             return false;
         }
     },
-    
+
     // Fallback clipboard method for older browsers
     fallbackCopyToClipboard(text) {
         try {
@@ -38,7 +38,7 @@ export const Clipboard = {
             return false;
         }
     },
-    
+
     // Add copy button to output elements
     addCopyButton(outputElement, textToCopy) {
         // Remove existing copy button if present
@@ -46,16 +46,26 @@ export const Clipboard = {
         if (existingButton) {
             existingButton.remove();
         }
-        
+
         // Create copy button
         const copyBtn = document.createElement('button');
-        copyBtn.className = 'btn copy-btn'; // Use your CSS classes
+        copyBtn.className = 'Copied';
         copyBtn.textContent = '📋 Copy';
-        
+        copyBtn.style.cssText = `
+            margin-top: 10px;
+            padding: 5px 10px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        `;
+
         copyBtn.addEventListener('click', async () => {
             const success = await this.copyToClipboard(textToCopy);
             if (success) {
-                copyBtn.textContent = '✅ Copied!'; // Fixed typo here (was btn-copyBtn)
+                btn-copyBtn.textContent = '✅ Copied!';
                 setTimeout(() => {
                     copyBtn.textContent = '📋 Copy';
                 }, 2000);
@@ -66,7 +76,7 @@ export const Clipboard = {
                 }, 2000);
             }
         });
-        
+
         outputElement.appendChild(copyBtn);
     }
 };

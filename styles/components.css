@@ -98,6 +98,14 @@
     background: #d0d0d0;
 }
 
+.btn.copy-btn {
+    width: auto;
+    margin: 10px 0 0 0;
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
 .copy-btn {
     margin-top: 10px;
     background: #28a745;

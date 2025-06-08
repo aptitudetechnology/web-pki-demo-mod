@@ -434,7 +434,7 @@ class PGPApp {
         console.log('Comment changed to:', event.target.value);
     }
 
- // Updated handleCopyPublicKey method
+    // Updated handleCopyPublicKey method
 async handleCopyPublicKey() {
     if (!this.state.currentKeyPair || !this.state.currentKeyPair.publicKey) {
         this.showError('No public key available to copy');
@@ -497,19 +497,17 @@ updateCopyButtonState(buttonId, state) {
     const button = document.getElementById(buttonId);
     if (!button) return;
     
-    // Store original text and classes if not already stored
+    // Store original text if not already stored
     if (!button.hasAttribute('data-original-text')) {
         button.setAttribute('data-original-text', button.textContent);
-        button.setAttribute('data-original-classes', button.className);
     }
     
     const originalText = button.getAttribute('data-original-text');
-    const originalClasses = button.getAttribute('data-original-classes');
     
     switch (state) {
         case 'copied':
             button.textContent = '✅ Copied!';
-            button.className = 'btn copy-btn copied'; // Use your CSS classes
+            button.style.backgroundColor = '#28a745'; // Green
             button.disabled = true;
             
             // Reset button after 2 seconds
@@ -521,7 +519,7 @@ updateCopyButtonState(buttonId, state) {
         case 'normal':
         default:
             button.textContent = originalText;
-            button.className = originalClasses; // Restore original classes
+            button.style.backgroundColor = ''; // Reset to default
             button.disabled = false;
             break;
     }

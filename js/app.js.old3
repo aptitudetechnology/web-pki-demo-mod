@@ -14,7 +14,6 @@ class PGPApp {
     
         // Initialize utilities first
         this.fileUtils = new FileUtils();
-        this.clipboard = Clipboard; // Add this line
 
         
         // Initialize modules
@@ -434,7 +433,6 @@ class PGPApp {
         console.log('Comment changed to:', event.target.value);
     }
 
- // Updated handleCopyPublicKey method
 async handleCopyPublicKey() {
     if (!this.state.currentKeyPair || !this.state.currentKeyPair.publicKey) {
         this.showError('No public key available to copy');
@@ -447,15 +445,8 @@ async handleCopyPublicKey() {
             ? this.state.currentKeyPair.publicKey 
             : this.state.currentKeyPair.publicKey.armor();
         
-        // Use the Clipboard utility
-        const success = await Clipboard.copyToClipboard(publicKeyArmored);
-        
-        if (success) {
-            this.updateCopyButtonState('copyPublicKeyBtn', 'copied');
-            this.showSuccess('Public key copied to clipboard');
-        } else {
-            this.showError('Failed to copy public key to clipboard');
-        }
+        await navigator.clipboard.writeText(publicKeyArmored);
+        this.showSuccess('Public key copied to clipboard');
         
     } catch (error) {
         console.error('Failed to copy public key:', error);
@@ -463,7 +454,6 @@ async handleCopyPublicKey() {
     }
 }
 
-// Updated handleCopyPrivateKey method
 async handleCopyPrivateKey() {
     if (!this.state.currentKeyPair || !this.state.currentKeyPair.privateKey) {
         this.showError('No private key available to copy');
@@ -476,57 +466,14 @@ async handleCopyPrivateKey() {
             ? this.state.currentKeyPair.privateKey 
             : this.state.currentKeyPair.privateKey.armor();
         
-        // Use the Clipboard utility
-        const success = await Clipboard.copyToClipboard(privateKeyArmored);
-        
-        if (success) {
-            this.updateCopyButtonState('copyPrivateKeyBtn', 'copied');
-            this.showSuccess('Private key copied to clipboard');
-        } else {
-            this.showError('Failed to copy private key to clipboard');
-        }
+        await navigator.clipboard.writeText(privateKeyArmored);
+        this.showSuccess('Private key copied to clipboard');
         
     } catch (error) {
         console.error('Failed to copy private key:', error);
         this.showError(`Failed to copy private key: ${error.message}`);
     }
 }
-
-// New method to update copy button states with visual feedback
-updateCopyButtonState(buttonId, state) {
-    const button = document.getElementById(buttonId);
-    if (!button) return;
-    
-    // Store original text and classes if not already stored
-    if (!button.hasAttribute('data-original-text')) {
-        button.setAttribute('data-original-text', button.textContent);
-        button.setAttribute('data-original-classes', button.className);
-    }
-    
-    const originalText = button.getAttribute('data-original-text');
-    const originalClasses = button.getAttribute('data-original-classes');
-    
-    switch (state) {
-        case 'copied':
-            button.textContent = '✅ Copied!';
-            button.className = 'btn copy-btn copied'; // Use your CSS classes
-            button.disabled = true;
-            
-            // Reset button after 2 seconds
-            setTimeout(() => {
-                this.updateCopyButtonState(buttonId, 'normal');
-            }, 2000);
-            break;
-            
-        case 'normal':
-        default:
-            button.textContent = originalText;
-            button.className = originalClasses; // Restore original classes
-            button.disabled = false;
-            break;
-    }
-}
-
 
 
     // Global event handlers
