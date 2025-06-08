@@ -23,7 +23,7 @@ export class Encrypt {
         // Toggle custom public key
       //  document.getElementById('toggleEncryptPublicKeyBtn').addEventListener('click', () => {
        //     this.toggleCustomPublicKey();
-      //  });
+        });
     }
 
     // Toggle custom public key input
