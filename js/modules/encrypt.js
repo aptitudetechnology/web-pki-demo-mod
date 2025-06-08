@@ -16,13 +16,13 @@ export class Encrypt {
     }
 
     // Setup event listeners
-  //  setupEventListeners() {
+    setupEventListeners() {
         // Encrypt button
- //      document.getElementById('encryptBtn').addEventListener('click', () => this.handleEncrypt());
+      document.getElementById('encryptBtn').addEventListener('click', () => this.handleEncrypt());
 
         // Toggle custom public key
-      //  document.getElementById('toggleEncryptPublicKeyBtn').addEventListener('click', () => {
-       //     this.toggleCustomPublicKey();
+       document.getElementById('toggleEncryptPublicKeyBtn').addEventListener('click', () => {
+           this.toggleCustomPublicKey();
         });
     }
 
