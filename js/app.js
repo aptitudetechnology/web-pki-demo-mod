@@ -23,7 +23,8 @@ class PGPApp {
        
         this.keyManager = new KeyManager(this.fileUtils);
         this.cryptoOps = new CryptoOps(this.fileUtils);
-        this.signVerify = new SignVerify();
+      //  this.signVerify = new SignVerify();
+      this.signVerify = new SignVerify(this.keyManager, this.cryptoOps);
         this.encrypt = new Encrypt();
         this.decrypt = new Decrypt();
         
