@@ -32,7 +32,6 @@ class PGPApp {
         // Application state
         this.state = {
             currentKeyPair: null,
-            currentPassphrase: null, // Add this line
             isGenerating: false,
             advancedConfig: {
                 algorithm: 'ecc',
@@ -173,9 +172,6 @@ class PGPApp {
             // Validate user input
             const userInfo = this.validateUserInput();
             
-            // Store the passphrase for later use
-            this.state.currentPassphrase = userInfo.passphrase;
-            
             // Generate key pair using KeyManager
             const keyPair = await this.keyManager.generateKeyPair(userInfo, this.state.advancedConfig);
             
@@ -242,16 +238,8 @@ class PGPApp {
         try {
             this.setLoading('loadKeyBtn', true);
             
-            // When loading a key, we need to ask for the passphrase
-            const passphrase = prompt('Enter the passphrase for this key:');
-            if (!passphrase) {
-                this.showError('Passphrase is required to load the key');
-                return;
-            }
-            
             const keyPair = await this.keyManager.loadKeyPair(file);
             this.state.currentKeyPair = keyPair;
-            this.state.currentPassphrase = passphrase; // Store the passphrase
             
             this.updateKeyInfo(keyPair);
             this.showSuccess('Key pair loaded successfully');
@@ -271,11 +259,6 @@ class PGPApp {
             return;
         }
         
-        if (!this.state.currentPassphrase) {
-            this.showError('No passphrase available. Please generate or load a key pair first.');
-            return;
-        }
-        
         try {
             const message = document.getElementById('messageToSignNew').value.trim();
             if (!message) {
@@ -285,12 +268,7 @@ class PGPApp {
             
             this.setLoading('signBtnNew', true);
             
-            // Pass the stored passphrase to the signing method
-            const signedMessage = await this.signVerify.signMessage(
-                message, 
-                this.state.currentKeyPair, 
-                this.state.currentPassphrase
-            );
+            const signedMessage = await this.signVerify.signMessage(message, this.state.currentKeyPair);
             
             this.showOutput('signOutputNew', 'Signed Message:', signedMessage);
             this.showSuccess('Message signed successfully');
@@ -797,7 +775,6 @@ updateCopyButtonState(buttonId, state) {
         return {
             initialized: this.isInitialized,
             hasKeys: this.state.currentKeyPair !== null,
-            hasPassphrase: this.state.currentPassphrase !== null,
             currentTab: this.state.currentTab,
             isGenerating: this.state.isGenerating
         };
