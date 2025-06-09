@@ -2,207 +2,101 @@ import { CONSTANTS } from '../utils/constants.js';
 import { Validation } from '../utils/validation.js';
 import { Clipboard } from '../utils/clipboard.js';
 
-// modules/signVerify.js - Sign and verify messages with proper key decryption
 export class SignVerify {
     constructor(keyManager, cryptoOps) {
         this.keyManager = keyManager;
         this.cryptoOps = cryptoOps;
+        this.currentMode = 'sign';
+        this.useCustomPublicKey = false;
     }
 
-    async signMessage(message, keyPair, passphrase) {
-        try {
-            console.log('Starting message signing...');
-            
-            if (!keyPair || !keyPair.privateKey) {
-                throw new Error('No private key available for signing');
-            }
-
-            if (!passphrase) {
-                throw new Error('Passphrase is required for signing');
-            }
-            
-            // Read the private key (handle both string and object formats)
-            let privateKey;
-            if (typeof keyPair.privateKey === 'string') {
-                privateKey = await openpgp.readPrivateKey({ armoredKey: keyPair.privateKey });
-            } else {
-                privateKey = keyPair.privateKey;
-            }
-
-            // Decrypt the private key with the passphrase
-            console.log('Decrypting private key...');
-            const decryptedPrivateKey = await openpgp.decryptKey({
-                privateKey: privateKey,
-                passphrase: passphrase
-            });
-
-            // Create the message to sign
-            const messageToSign = await openpgp.createMessage({ text: message });
-
-            // Sign the message
-            console.log('Signing message...');
-            const signedMessage = await openpgp.sign({
-                message: messageToSign,
-                signingKeys: decryptedPrivateKey,
-                format: 'armored' // This will return the signature in ASCII armor format
-            });
-
-            console.log('Message signed successfully');
-            return signedMessage;
-
-        } catch (error) {
-            console.error('Error signing message:', error);
-            throw new Error(`Error signing message: ${error.message}`);
-        }
+    // Initialize sign & verify functionalityValidate message
+    init() {
+        this.setupEventListeners();
+        this.updateUI();
     }
 
-    async verifyMessage(signedMessage, publicKey) {
-        try {
-            console.log('Starting message verification...');
-            
-            if (!signedMessage) {
-                throw new Error('No signed message provided');
-            }
+    // Setup event listeners
+    setupEventListeners() {
+        // Tab switching
+        document.getElementById('signTab').addEventListener('click', () => this.switchTab('sign'));
+        document.getElementById('verifyTab').addEventListener('click', () => this.switchTab('verify'));
 
-            // Read the signed message
-            let message;
-            try {
-                message = await openpgp.readMessage({ armoredMessage: signedMessage });
-            } catch (error) {
-                throw new Error('Invalid signed message format');
-            }
+        // Sign button
+        document.getElementById('signBtnNew').addEventListener('click', () => this.handleSign());
 
-            // Handle public key (could be string or object)
-            let verificationKeys;
-            if (publicKey) {
-                if (typeof publicKey === 'string') {
-                    verificationKeys = await openpgp.readKey({ armoredKey: publicKey });
-                } else {
-                    verificationKeys = publicKey;
-                }
-            } else {
-                throw new Error('No public key provided for verification');
-            }
+        // Verify button
+        document.getElementById('verifyBtn').addEventListener('click', () => this.handleVerify());
 
-            // Verify the signature
-            console.log('Verifying signature...');
-            const verificationResult = await openpgp.verify({
-                message: message,
-                verificationKeys: verificationKeys
-            });
-
-            // Process verification results
-            const { data: verifiedData, signatures } = verificationResult;
-            
-            let isValid = false;
-            let signerInfo = null;
-
-            if (signatures && signatures.length > 0) {
-                // Check if any signature is valid
-                for (const signature of signatures) {
-                    try {
-                        await signature.verified; // This will throw if signature is invalid
-                        isValid = true;
-                        
-                        // Try to get signer information
-                        if (signature.keyID) {
-                            signerInfo = signature.keyID.toHex();
-                        }
-                        break; // At least one valid signature found
-                    } catch (e) {
-                        console.log('Signature verification failed:', e.message);
-                    }
-                }
-            }
-
-            console.log('Verification completed');
-            
-            return {
-                valid: isValid,
-                message: verifiedData,
-                signer: signerInfo,
-                signatures: signatures.length
-            };
-
-        } catch (error) {
-            console.error('Error verifying message:', error);
-            throw new Error(`Error verifying message: ${error.message}`);
-        }
-    }
-
-    // Helper method to get passphrase from user (fallback if passphrase not provided)
-    async getPassphraseForSigning() {
-        // This method is now mainly for fallback cases
-        // The main app should pass the passphrase directly
-        return new Promise((resolve, reject) => {
-            // Create a simple modal for passphrase input
-            const modal = this.createPassphraseModal();
-            document.body.appendChild(modal);
-            
-            const passphraseInput = modal.querySelector('#signingPassphrase');
-            const confirmBtn = modal.querySelector('#confirmPassphrase');
-            const cancelBtn = modal.querySelector('#cancelPassphrase');
-            
-            const cleanup = () => {
-                document.body.removeChild(modal);
-            };
-            
-            confirmBtn.addEventListener('click', () => {
-                const passphrase = passphraseInput.value;
-                if (!passphrase) {
-                    alert('Please enter your passphrase');
-                    return;
-                }
-                cleanup();
-                resolve(passphrase);
-            });
-            
-            cancelBtn.addEventListener('click', () => {
-                cleanup();
-                reject(new Error('Passphrase entry cancelled'));
-            });
-            
-            // Focus on input
-            passphraseInput.focus();
-            
-            // Handle Enter key
-            passphraseInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    confirmBtn.click();
-                }
-            });
+        // Toggle custom public key for verification
+        document.getElementById('toggleVerifyPublicKeyBtn').addEventListener('click', () => {
+            this.toggleCustomPublicKey();
         });
     }
 
-    // Create a simple modal for passphrase input
-    createPassphraseModal() {
-        const modal = document.createElement('div');
-        modal.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10000;
-        `;
+    // Switch between sign and verify tabs
+    switchTab(mode) {
+        this.currentMode = mode;
+
+        // Update tab buttons
+        document.getElementById('signTab').classList.toggle('active', mode === 'sign');
+        document.getElementById('verifyTab').classList.toggle('active', mode === 'verify');
+
+        // Update tab content
+        document.getElementById('signMode').classList.toggle('active', mode === 'sign');
+        document.getElementById('verifyMode').classList.toggle('active', mode === 'verify');
+
+        this.updateUI();
+    }
+
+    // Toggle custom public key input for verification
+    toggleCustomPublicKey() {
+        this.useCustomPublicKey = !this.useCustomPublicKey;
         
-        modal.innerHTML = `
-            <div style="background: white; padding: 20px; border-radius: 8px; max-width: 400px; width: 90%;">
-                <h3>Enter Passphrase</h3>
-                <p>Please enter your passphrase to decrypt the signing key:</p>
-                <input type="password" id="signingPassphrase" placeholder="Enter passphrase..." style="width: 100%; padding: 8px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px;">
-                <div style="text-align: right; margin-top: 15px;">
-                    <button id="cancelPassphrase" style="margin-right: 10px; padding: 8px 16px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">Cancel</button>
-                    <button id="confirmPassphrase" style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Confirm</button>
-                </div>
-            </div>
-        `;
+        const container = document.getElementById('verifyCustomPublicKeyContainer');
+        const button = document.getElementById('toggleVerifyPublicKeyBtn');
         
-        return modal;
+        if (this.useCustomPublicKey) {
+            container.style.display = 'block';
+            button.textContent = 'Use Own Public Key';
+        } else {
+            container.style.display = 'none';
+            button.textContent = 'Use Custom Public Key';
+        }
+    }
+
+// Add these methods to your SignVerify class
+
+// Direct method for signing (used by app.js)
+async signMessage(message, keyPair) {
+    try {
+        // Validate message
+        if (!message || typeof message !== 'string') {
+            throw new Error('Valid message string is required');
+        }
+
+        // Validate keyPair
+        if (!keyPair || !keyPair.privateKey) {
+            throw new Error('Valid key pair with private key is required');
+        }
+
+        // Extract the private key
+        const privateKey = typeof keyPair.privateKey === 'string' 
+            ? await openpgp.readPrivateKey({ armoredKey: keyPair.privateKey })
+            : keyPair.privateKey;
+
+        // Create message object
+        const messageObj = await openpgp.createMessage({ text: message });
+
+        // Sign the message
+        const signed = await openpgp.sign({
+            message: messageObj,
+            signingKeys: privateKey
+        });
+
+        return signed;
+    } catch (error) {
+        throw new Error(`Failed to sign message: ${error.message}`);
     }
 }
 
